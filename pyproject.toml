@@ -20,6 +20,9 @@ packages = [{include = "jobscraper", from = "src"}]
 pytest = "^8.4.0"
 isort = "^6.0.1"
 
+[tool.poetry.scripts]
+jobscraper = "jobscraper.main:main"
+
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
 build-backend = "poetry.core.masonry.api"
