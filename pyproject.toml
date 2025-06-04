@@ -1,0 +1,25 @@
+[project]
+name = "jobscraper"
+version = "0.1.0"
+description = "jobscraper is a Python package that automates the process of scraping job listings from jobstreet"
+authors = [
+    {name = "depermana12",email = "deddiapermana97@gmail.com"}
+]
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "selenium (>=4.33.0,<5.0.0)",
+    "rich (>=14.0.0,<15.0.0)"
+]
+
+[tool.poetry]
+packages = [{include = "jobscraper", from = "src"}]
+
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.4.0"
+isort = "^6.0.1"
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
