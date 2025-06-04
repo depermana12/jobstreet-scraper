@@ -4,6 +4,7 @@ from selenium.common.exceptions import (
     StaleElementReferenceException,
     ElementClickInterceptedException,
     TimeoutException,
+    NoSuchElementException,
 )
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
@@ -37,19 +38,23 @@ class JobScraper:
             )
         except TimeoutException:
             self.logger.error(f"Error finding element {value}: not found")
-            return None
+            raise NoSuchElementException(f"Element not found: {value}")
 
     def _login(self):
-        sign_in = self._find_element(By.CSS_SELECTOR, "a[data-automation='sign in']")
-        if sign_in:
+        try:
+            sign_in = self._find_element(
+                By.CSS_SELECTOR, "a[data-automation='sign in']"
+            )
             self._click_element(sign_in)
             self.logger.info("Clicked on Sign In button")
-        email_input = self._find_element(By.ID, "emailAddress")
-        if email_input:
+            email_input = self._find_element(By.ID, "emailAddress")
             email_input.send_keys(self.email)
             time.sleep(0.3)
             email_input.send_keys(Keys.ENTER)
             return self._otp()
+        except NoSuchElementException as e:
+            self.logger.error(f"Login failed: {e}")
+            return False
 
     def _otp(self):
         try:
@@ -57,19 +62,13 @@ class JobScraper:
             otp_input = self._find_element(
                 By.CSS_SELECTOR, "input[aria-label='verification input']"
             )
-            if otp_input:
-                otp_input.click()
-                for digit in otp:
-                    otp_input.send_keys(digit)
-                    time.sleep(0.2)
-                    # no otp error checking here, assuming user inputs correctly
-                WebDriverWait(self.driver, self.long_wait).until(
-                    EC.presence_of_element_located((By.ID, "SearchBar"))
-                )
-                return True
-        except TimeoutException:
-            self.logger.error("OTP input field not found or timed out")
-            return False
-        except Exception as e:
-            self.logger.error(f"Unexpected error during OTP input: {e}")
+            otp_input.click()
+            for digit in otp:
+                otp_input.send_keys(digit)
+                time.sleep(0.2)
+                # no otp error checking
+            self._find_element(By.ID, "SearchBar")
+            return True
+        except NoSuchElementException as e:
+            self.logger.error(f"OTP input failed: {e}")
             return False
