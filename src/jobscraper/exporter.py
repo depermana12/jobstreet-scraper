@@ -41,13 +41,13 @@ def _get_timestamp_filename(prefix: str, extension: str) -> str:
 
 def export_to_csv(jobs_data, filename="jobstreet_jobs"):
     """Export jobs data to CSV file"""
-    filename = _get_timestamp_filename(filename, "csv")
 
     if not jobs_data:
-        with open(filename, "w", newline="", encoding="utf-8") as f:
+        no_data_filename = _get_timestamp_filename(filename, "csv")
+        with open(no_data_filename, "w", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
             writer.writerow(["No Data. Check log for details."])
-        return filename
+        return no_data_filename, None
 
     main_data = []
     secondary_data = []
@@ -75,13 +75,15 @@ def export_to_csv(jobs_data, filename="jobstreet_jobs"):
         writer.writerows(main_data)
     logger.info(f"Exported {len(main_data)} main jobs to {main_filename}")
 
-    secondary_filename = _get_timestamp_filename(f"{filename}_secondary", "csv")
-    with open(secondary_filename, "w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=SECONDARY_CSV)
-        writer.writeheader()
-        writer.writerows(secondary_data)
-    logger.info(
-        f"Exported {len(secondary_data)} secondary jobs to {secondary_filename}"
-    )
+    secondary_filename = None
+    if secondary_data:
+        secondary_filename = _get_timestamp_filename(f"{filename}_secondary", "csv")
+        with open(secondary_filename, "w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=SECONDARY_CSV)
+            writer.writeheader()
+            writer.writerows(secondary_data)
+        logger.info(
+            f"Exported {len(secondary_data)} secondary jobs to {secondary_filename}"
+        )
 
     return main_filename, secondary_filename
