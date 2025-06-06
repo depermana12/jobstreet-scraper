@@ -77,7 +77,8 @@ class JobScraper:
             # enter email
             email_input = self._find_element_wait(By.ID, "emailAddress")
             email_input.send_keys(self.email)
-            email_input.send_keys(Keys.ENTER)
+            if email_input.get_attribute("value") == self.email:
+                email_input.send_keys(Keys.ENTER)
             return self._otp()
 
         except NoSuchElementException as e:
@@ -110,13 +111,11 @@ class JobScraper:
         try:
             # input keyword
             keyword_input = self._find_element_wait(By.ID, "keywords-input")
-            keyword_input.clear()
             keyword_input.click()
             keyword_input.send_keys(keyword)
 
             # input location
             location_input = self._find_element_wait(By.ID, "SearchBar__Where")
-            location_input.clear()
             location_input.click()
             location_input.send_keys(location)
             keyword_input.send_keys(Keys.ENTER)
@@ -126,46 +125,38 @@ class JobScraper:
             )
 
             # wait for search results
-            time.sleep(3)
-            self._find_element_wait(By.CSS_SELECTOR, "article[id^='jobcard-']")
+            WebDriverWait(self.driver, self.long_wait).until(
+                EC.presence_of_element_located(
+                    (By.CSS_SELECTOR, "section[aria-label='Hasil Pencarian']")
+                )
+            )
+            # wait extra for job cards to load
+            WebDriverWait(self.driver, self.long_wait).until(
+                EC.presence_of_all_elements_located(
+                    (By.CSS_SELECTOR, "article[id^='jobcard-']")
+                )
+            )
 
-            # find job counts
-            try:
-                # get total job count
-                job_count_element = self._find_element_wait(
-                    By.CSS_SELECTOR, "h1[data-automation='totaljobsMessage']"
-                )
-                job_count_text = job_count_element.text.strip()
-            except NoSuchElementException:
-                self.logger.warning(
-                    "Total job count element not found, using fallback method"
-                )
-                job_count_element = self._find_element_wait(
-                    By.CSS_SELECTOR, "div[data-automation='totalJobsCountBcues']"
-                )
-                job_count_text = job_count_element.text.strip()
-                print(f"Total job count text: {job_count_text}")
-                self.logger.info(f"Total job count text: {job_count_text}")
-            try:
-                # remove "lowongan" and other text, keep only numbers and commas
-                numbers = re.findall(r"[\d,\.]+", job_count_text.replace(".", ","))
-                if numbers:
-                    job_count_str = numbers[0].replace(",", "")
-                    job_count = int(job_count_str)
-                    self.logger.info(f"Parsed job count: {job_count}")
-                    print(f"Total jobs found: {job_count}")
-                    return job_count
-            except ValueError as e:
-                self.logger.error(f"Error parsing job count '{job_count_text}': {e}")
-                return 0
+            time.sleep(2)
 
             # sort to date, alternative using search query
+            sort_selectors = [
+                "div[data-automation='trigger'][role='button']",
+                "button[data-automation='sortedByButtonIconBcues']",
+            ]
+            sort_dropdown = None
+            for selector in sort_selectors:
+                try:
+                    self.logger.info(f"Looking for sort dropdown: {selector}")
+                    sort_dropdown = self._find_element_wait(By.CSS_SELECTOR, selector)
+                    self.logger.info(f"Found sort dropdown with: {selector}")
+                    break
+                except NoSuchElementException:
+                    self.logger.warning(f"Sort dropdown not found: {selector}")
+                    continue
 
-            sort_dropdown = self._find_element_wait(
-                By.CSS_SELECTOR, "div[data-automation='trigger'][role='button']"
-            )
-            self.logger.info("Clicking sort dropdown...")
-            self._click_element(sort_dropdown)
+            if sort_dropdown:
+                self._click_element(sort_dropdown)
 
             # wait for the dropdown menu to be visible
             self.logger.info("Waiting for dropdown menu to appear...")
@@ -184,12 +175,55 @@ class JobScraper:
             if tanggal_option:
                 self.logger.info(f"Clicking sort by: {tanggal_option.text}")
                 self._click_element(tanggal_option)
-                self.logger.info("Successfully clicked helper click Tanggal option")
 
             # wait for page to reload with new sort order
             time.sleep(3)
             self._find_element_wait(By.CSS_SELECTOR, "[data-automation='initialView']")
             self.logger.info("Successfully sorted jobs by date")
+
+            # find job counts
+            job_count_selectors = [
+                "h1[data-automation='totaljobsMessage']",
+                "div[data-automation='totalJobsCountBcues']",
+                "span[data-automation='totalJobsCount']",
+                "h1[id='SearchSummary']",
+            ]
+            job_count_text = None
+            for selector in job_count_selectors:
+                try:
+                    self.logger.info(f"Trying job count selector: {selector}")
+                    job_count_element = self._find_element_wait(
+                        By.CSS_SELECTOR, selector
+                    )
+                    job_count_text = job_count_element.text.strip()
+                    self.logger.info(
+                        f"Found job count with selector '{selector}': {job_count_text}"
+                    )
+                    break
+                except NoSuchElementException:
+                    self.logger.warning(f"Job count selector not found: {selector}")
+                    continue
+
+            if not job_count_text:
+                self.logger.error("Job count not found with any selector")
+                return 0
+
+            # Parse job count
+            try:
+                if match := re.search(r"[\d,]+", job_count_text):
+                    job_count_str = match.group().replace(",", "")
+                    job_count = int(job_count_str)
+                    self.logger.info(f"Total jobs found: {job_count}")
+                    print(f"Total jobs found: {job_count}")
+                    return job_count
+                else:
+                    self.logger.error(
+                        f"No numbers found in job count text: {job_count_text}"
+                    )
+                    return 0
+            except ValueError as e:
+                self.logger.error(f"Error parsing job count '{job_count_text}': {e}")
+                return 0
 
         except NoSuchElementException as e:
             self.logger.error(f"Job keyword search failed: {e}")
@@ -255,41 +289,30 @@ class JobScraper:
 
             except NoSuchElementException:
                 self.logger.info("Business type and employee count section not found")
-            except Exception as e:
-                self.logger.warning(f"Error extracting business info: {e}")
 
             # benefits
             try:
-                self.logger.info("Extracting company benefits")
                 benefits_section_xpath = "./div[2]/section/div/div"
                 benefits_container = company_card.find_element(
                     By.XPATH, benefits_section_xpath
                 )
                 benefit_spans = benefits_container.find_elements(By.XPATH, "./span")
-                self.logger.info(f"Found {len(benefit_spans)} benefits spans")
                 if benefit_spans:
                     benefits_list = []
                     for idx, span in enumerate(benefit_spans, start=1):
                         try:
-                            self.logger.info(
-                                f"Processing benefit {idx}/{len(benefit_spans)}"
-                            )
                             benefit = span.find_element(By.XPATH, "./div")
                             benefit_text = self._clean_text(benefit.text.strip())
                             if benefit_text:
                                 benefits_list.append(benefit_text)
-                                self.logger.info(f"Extracted benefit: {benefit_text}")
-                            else:
-                                self.logger.warning(
-                                    f"Empty benefit text found at index {idx}"
-                                )
+
                         except NoSuchElementException:
                             self.logger.warning(f"Benefit div not found in span {idx}")
 
                     if benefits_list:
                         company_profile["company_benefits"] = benefits_list
                         self.logger.info(
-                            f"Successfully extracted {len(benefits_list)} benefits: {benefits_list}"
+                            f"Successfully extracted {len(benefits_list)} benefit"
                         )
 
             except NoSuchElementException:
@@ -309,7 +332,6 @@ class JobScraper:
         if not self._click_element(card):
             return None
 
-        time.sleep(1)  # wait for the job details page to load
         details = self._find_element_wait(
             By.CSS_SELECTOR, "[data-automation='jobDetailsPage']"
         )
@@ -340,7 +362,7 @@ class JobScraper:
                     details, selectors["classification"]
                 ),
                 "job_type": self._get_element_text(details, selectors["type"]),
-                "job_description": self._get_element_text(
+                "job_requirements": self._get_element_text(
                     details, selectors["description"]
                 ),
             }
@@ -414,7 +436,14 @@ class JobScraper:
                 self.logger.error("Login failed, cannot scrape jobs")
                 raise Exception("Login failed")
 
-            time.sleep(2)  # wait before serching jobs
+            # wait for the home page to load before searching
+            WebDriverWait(self.driver, self.long_wait).until(
+                EC.presence_of_element_located(
+                    (By.CSS_SELECTOR, "div[data-automation='homePage']")
+                )
+            )
+
+            time.sleep(2)
 
             job_count = self._search_jobs_keyword(
                 keyword="linux", location="Jakarta Raya"
@@ -446,9 +475,6 @@ class JobScraper:
                     }
                     job_details = self._extract_job_details(card)
                     elapsed = time.time() - job_start_time
-                    self.logger.info(
-                        f"Job {job_details.get('job_title')} processed in {elapsed:.2f} seconds"
-                    )
                     if job_details:
                         job_record = {**job_info, **job_details}
                         self.jobs_data.append(job_record)
@@ -458,6 +484,10 @@ class JobScraper:
                         )
 
                 print(f"Completed page {page_num}, total jobs: {total_jobs_scraped}")
+                self.logger.info(
+                    f"Completed page {page_num}, total jobs: {total_jobs_scraped}"
+                )
+
                 if not self._next_page():
                     self.logger.info("No more pages to scrape")
                     break
@@ -467,6 +497,9 @@ class JobScraper:
             raise
         finally:
             elapsed_time = time.time() - start_scrape_time
+            print(
+                f"Total jobs scraped: {len(self.jobs_data)}, took {elapsed_time:.2f}s"
+            )
             self.logger.info(
                 f"Total jobs scraped: {len(self.jobs_data)}, took {elapsed_time:.2f}s"
             )
