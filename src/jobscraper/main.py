@@ -8,7 +8,9 @@ def main():
     scraper = JobScraper()
     # try:
     jobs_data = scraper.scrape_jobs()
-    export_to_csv(jobs_data)
+    main_data, secondary_data = export_to_csv(jobs_data)
+    print(f"Main data exported to: {main_data}")
+    print(f"Secondary data exported to: {secondary_data}")
 
     # finally:
     #     scraper.close()
