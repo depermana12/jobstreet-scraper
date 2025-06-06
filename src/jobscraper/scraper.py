@@ -1,10 +1,13 @@
+from datetime import datetime, timedelta
 import logging
+import re
 import time
 from selenium.common.exceptions import (
     StaleElementReferenceException,
     ElementClickInterceptedException,
     TimeoutException,
     NoSuchElementException,
+    WebDriverException,
 )
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
@@ -33,86 +36,161 @@ class JobScraper:
             self.logger.warning(f"Element not clickable: {e}")
             return False
 
-    def _find_element(self, by, value):
+    def _find_element_wait(self, by, value):
         try:
             return WebDriverWait(self.driver, self.long_wait).until(
                 EC.presence_of_element_located((by, value))
             )
         except TimeoutException:
-            self.logger.error(f"Error finding element {value}: not found")
+            self.logger.error(f"Timeout finding element: {value}")
             raise NoSuchElementException(f"Element not found: {value}")
+
+    def _clean_text(self, text):
+        if not text:
+            return text
+
+        # remove invisible characters (zero-width space, word joiner, etc.)
+        cleaned = re.sub(r"[\u2060\u200B-\u200F\uFEFF]", "", text)
+        cleaned = cleaned.replace("–", "-").replace("—", "-")
+        return cleaned
+
+    def _parse_posted_date(self, date_text: str):
+        if not date_text or "Posted" not in date_text:
+            return None
+
+        text = date_text.replace("Posted", "").strip()
+        if "30+" in text:
+            return "30+ days ago"
+
+        if match := re.search(r"\d+", text):
+            days_ago = int(match[0])
+            posted_date = datetime.now() - timedelta(days=days_ago)
+            return posted_date.strftime("%d-%m-%Y")
+        return None
 
     def _login(self):
         try:
-            sign_in = self._find_element(
+            sign_in = self._find_element_wait(
                 By.CSS_SELECTOR, "a[data-automation='sign in']"
             )
             self._click_element(sign_in)
-            self.logger.info("Clicked on Sign In button")
-            email_input = self._find_element(By.ID, "emailAddress")
+            # enter email
+            email_input = self._find_element_wait(By.ID, "emailAddress")
             email_input.send_keys(self.email)
-            time.sleep(0.3)
             email_input.send_keys(Keys.ENTER)
             return self._otp()
+
         except NoSuchElementException as e:
             self.logger.error(f"Login failed: {e}")
             return False
 
     def _otp(self):
         try:
-            otp = input("Enter the OTP sent to your email: ").strip()
-            otp_input = self._find_element(
+            otp = input("Enter OTP: ").strip()
+            if not otp.isdigit() or len(otp) != 6:
+                self.logger.error("Invalid OTP format. Please enter a 6-digit code.")
+                return False
+
+            otp_input = self._find_element_wait(
                 By.CSS_SELECTOR, "input[aria-label='verification input']"
             )
             otp_input.click()
             for digit in otp:
                 otp_input.send_keys(digit)
                 time.sleep(0.2)
-                # no otp error checking
-            self._find_element(By.ID, "SearchBar")
+            # wait until it redirects to the job search page
+            self._find_element_wait(By.ID, "SearchBar")
             return True
+
         except NoSuchElementException as e:
             self.logger.error(f"OTP input failed: {e}")
             return False
 
-    def _job_keyword(self, keyword="linux", location="Jakarta Raya"):
+    def _search_jobs_keyword(self, keyword="linux", location="Jakarta Raya"):
         try:
-            keyword_input = self._find_element(By.ID, "keywords-input")
-            keyword_input.click()
+            # input keyword
+            keyword_input = self._find_element_wait(By.ID, "keywords-input")
             keyword_input.clear()
+            keyword_input.click()
             keyword_input.send_keys(keyword)
-            time.sleep(0.2)
-            location_input = self._find_element(By.ID, "SearchBar__Where")
-            location_input.click()
+
+            # input location
+            location_input = self._find_element_wait(By.ID, "SearchBar__Where")
             location_input.clear()
+            location_input.click()
             location_input.send_keys(location)
-            location_input.send_keys(Keys.ENTER)
-            time.sleep(2)  # wait for search results to load
+            keyword_input.send_keys(Keys.ENTER)
+
             self.logger.info(
                 f"Searching for jobs with keyword: {keyword} in {location}"
             )
-            job_found_counts = self._find_element(By.ID, "SearchSummary")
 
-            # select sort by date
-            job_sort_by = WebDriverWait(self.driver, self.long_wait).until(
+            # wait for search results
+            time.sleep(3)
+            self._find_element_wait(By.CSS_SELECTOR, "article[id^='jobcard-']")
+
+            # find job counts
+            try:
+                # get total job count
+                job_count_element = self._find_element_wait(
+                    By.CSS_SELECTOR, "h1[data-automation='totaljobsMessage']"
+                )
+                job_count_text = job_count_element.text.strip()
+            except NoSuchElementException:
+                self.logger.warning(
+                    "Total job count element not found, using fallback method"
+                )
+                job_count_element = self._find_element_wait(
+                    By.CSS_SELECTOR, "div[data-automation='totalJobsCountBcues']"
+                )
+                job_count_text = job_count_element.text.strip()
+                print(f"Total job count text: {job_count_text}")
+                self.logger.info(f"Total job count text: {job_count_text}")
+            try:
+                # remove "lowongan" and other text, keep only numbers and commas
+                numbers = re.findall(r"[\d,\.]+", job_count_text.replace(".", ","))
+                if numbers:
+                    job_count_str = numbers[0].replace(",", "")
+                    job_count = int(job_count_str)
+                    self.logger.info(f"Parsed job count: {job_count}")
+                    print(f"Total jobs found: {job_count}")
+                    return job_count
+            except ValueError as e:
+                self.logger.error(f"Error parsing job count '{job_count_text}': {e}")
+                return 0
+
+            # sort to date, alternative using search query
+
+            sort_dropdown = self._find_element_wait(
+                By.CSS_SELECTOR, "div[data-automation='trigger'][role='button']"
+            )
+            self.logger.info("Clicking sort dropdown...")
+            self._click_element(sort_dropdown)
+
+            # wait for the dropdown menu to be visible
+            self.logger.info("Waiting for dropdown menu to appear...")
+            WebDriverWait(self.driver, self.short_wait).until(
+                EC.visibility_of_element_located((By.CSS_SELECTOR, "div[role='menu']"))
+            )
+
+            tanggal_option = WebDriverWait(self.driver, 3).until(
                 EC.element_to_be_clickable(
-                    (By.CSS_SELECTOR, "span[data-automation='active-sortBy']")
+                    (
+                        By.CSS_SELECTOR,
+                        "a[role='menuitem'][data-automation='sortby-1']",
+                    )
                 )
             )
-            job_sort_by.click()
-            sort_by_tanggal = self._find_element(
-                By.CSS_SELECTOR, "a[data-automation='sortby-1']"
-            )
-            time.sleep(0.2)
-            self._click_element(sort_by_tanggal)
-            self.logger.info(
-                f"Sorting jobs by: {job_sort_by.text} - {sort_by_tanggal.text}"
-            )
+            if tanggal_option:
+                self.logger.info(f"Clicking sort by: {tanggal_option.text}")
+                self._click_element(tanggal_option)
+                self.logger.info("Successfully clicked helper click Tanggal option")
 
-            self.logger.info(f"Jobs found: {job_found_counts.text}")
-            job_count_text = job_found_counts.text.split()[0]
-            print(f"Total jobs found: {job_count_text}")
-            return int(job_count_text)
+            # wait for page to reload with new sort order
+            time.sleep(3)
+            self._find_element_wait(By.CSS_SELECTOR, "[data-automation='initialView']")
+            self.logger.info("Successfully sorted jobs by date")
+
         except NoSuchElementException as e:
             self.logger.error(f"Job keyword search failed: {e}")
             return 0
@@ -135,20 +213,264 @@ class JobScraper:
             self.logger.error(f"Job cards not found: {e}")
             return []
 
+    def _get_element_text(self, parent, selector, fallback=None):
+        try:
+            return parent.find_element(By.CSS_SELECTOR, selector).text.strip()
+        except NoSuchElementException:
+            self.logger.warning(f"Element with selector '{selector}' not found")
+            return fallback
+
+    def _extract_company_profile(self, details):
+        try:
+            company_card = details.find_element(
+                By.CSS_SELECTOR, "[data-automation='company-profile']"
+            )
+            company_profile = {
+                "company_business_type": None,
+                "company_employees_count": None,
+                "company_benefits": None,
+            }
+
+            try:
+                business_section_xpath = ".//div[1]/section[2]/div[1]"
+                business_section = company_card.find_element(
+                    By.XPATH, business_section_xpath
+                )
+
+                spans = business_section.find_elements(By.XPATH, "./span")
+
+                if len(spans) >= 1:
+                    business_type = self._clean_text(spans[0].text.strip())
+                    if business_type:
+                        company_profile["company_business_type"] = business_type
+                        self.logger.info(f"Extracted business type: {business_type}")
+
+                if len(spans) >= 2:
+                    employee_count = self._clean_text(
+                        spans[1].text.strip().split(" ")[0]
+                    )
+                    if employee_count:
+                        company_profile["company_employees_count"] = employee_count
+                        self.logger.info(f"Extracted employee count: {employee_count}")
+
+            except NoSuchElementException:
+                self.logger.info("Business type and employee count section not found")
+            except Exception as e:
+                self.logger.warning(f"Error extracting business info: {e}")
+
+            # benefits
+            try:
+                self.logger.info("Extracting company benefits")
+                benefits_section_xpath = "./div[2]/section/div/div"
+                benefits_container = company_card.find_element(
+                    By.XPATH, benefits_section_xpath
+                )
+                benefit_spans = benefits_container.find_elements(By.XPATH, "./span")
+                self.logger.info(f"Found {len(benefit_spans)} benefits spans")
+                if benefit_spans:
+                    benefits_list = []
+                    for idx, span in enumerate(benefit_spans, start=1):
+                        try:
+                            self.logger.info(
+                                f"Processing benefit {idx}/{len(benefit_spans)}"
+                            )
+                            benefit = span.find_element(By.XPATH, "./div")
+                            benefit_text = self._clean_text(benefit.text.strip())
+                            if benefit_text:
+                                benefits_list.append(benefit_text)
+                                self.logger.info(f"Extracted benefit: {benefit_text}")
+                            else:
+                                self.logger.warning(
+                                    f"Empty benefit text found at index {idx}"
+                                )
+                        except NoSuchElementException:
+                            self.logger.warning(f"Benefit div not found in span {idx}")
+
+                    if benefits_list:
+                        company_profile["company_benefits"] = benefits_list
+                        self.logger.info(
+                            f"Successfully extracted {len(benefits_list)} benefits: {benefits_list}"
+                        )
+
+            except NoSuchElementException:
+                self.logger.info("Benefits section not found")
+
+            return company_profile
+
+        except NoSuchElementException:
+            self.logger.info("No company profile card found")
+            return {
+                "company_business_type": None,
+                "company_employees_count": None,
+                "company_benefits": None,
+            }
+
+    def _extract_job_details(self, card):
+        if not self._click_element(card):
+            return None
+
+        time.sleep(1)  # wait for the job details page to load
+        details = self._find_element_wait(
+            By.CSS_SELECTOR, "[data-automation='jobDetailsPage']"
+        )
+        if not details:
+            self.logger.error("Job details not found after clicking the card")
+            return None
+
+        # selectors for job details
+        selectors = {
+            "title": "h1[data-automation='job-detail-title']",
+            "company": "span[data-automation='advertiser-name']",
+            "rating": "span[data-automation='company-review']",
+            "location": "span[data-automation='job-detail-location']",
+            "classification": "span[data-automation='job-detail-classifications']",
+            "type": "span[data-automation='job-detail-work-type']",
+            "salary": "span[data-automation='job-detail-salary']",
+            "apply_link": "a[data-automation='job-detail-apply']",
+            "description": "div[data-automation='jobAdDetails']",
+        }
+
+        try:
+            # extract fixed fields
+            job_data = {
+                "job_title": self._get_element_text(details, selectors["title"]),
+                "company_name": self._get_element_text(details, selectors["company"]),
+                "job_location": self._get_element_text(details, selectors["location"]),
+                "job_classification": self._get_element_text(
+                    details, selectors["classification"]
+                ),
+                "job_type": self._get_element_text(details, selectors["type"]),
+                "job_description": self._get_element_text(
+                    details, selectors["description"]
+                ),
+            }
+
+            # extract optional fields
+            job_data["company_rating"] = self._get_element_text(
+                details, selectors["rating"]
+            )
+            salary_text = self._get_element_text(details, selectors["salary"])
+            if salary_text:
+                job_data["job_salary_range"] = self._clean_text(
+                    salary_text.replace("per month", "")
+                )
+            else:
+                job_data["job_salary_range"] = None
+
+            try:
+                posted_elem = details.find_element(
+                    By.XPATH, ".//span[contains(text(), 'Posted ')]"
+                )
+                job_data["job_posted_date"] = self._parse_posted_date(
+                    self._clean_text(posted_elem.text.strip())
+                )
+            except NoSuchElementException:
+                job_data["job_posted_date"] = None
+
+            apply_link = details.find_element(
+                By.CSS_SELECTOR, selectors["apply_link"]
+            ).get_attribute("href")
+            job_data["job_apply_link"] = apply_link
+            job_data["job_url"] = apply_link.split("apply")[0] if apply_link else None
+
+            company_profile = self._extract_company_profile(details)
+            job_data.update(company_profile)
+
+            return job_data
+
+        except NoSuchElementException as e:
+            self.logger.error(f"Failed to extract job details: {e}")
+            return None
+
+    def _next_page(self):
+        try:
+            current_url = self.driver.current_url
+            next_button = self._find_element_wait(
+                By.CSS_SELECTOR,
+                f"a[aria-label='Selanjutnya']",
+            )
+            self._click_element(next_button)
+            WebDriverWait(self.driver, self.short_wait).until(
+                lambda d: d.current_url != current_url
+            )
+            self._find_element_wait(By.CSS_SELECTOR, "article[id^='jobcard-']")
+            self.logger.info("Navigated to the next page")
+            return True
+        except (NoSuchElementException, ElementClickInterceptedException) as e:
+            self.logger.error(f"Failed to navigate to next page: {e}")
+            return False
+
     def scrape_jobs(self):
         try:
+            start_scrape_time = time.time()
             self.driver.get(self.url)
-            time.sleep(2)  # wait for page to load
+            WebDriverWait(self.driver, self.long_wait).until(
+                EC.presence_of_element_located(
+                    (By.CSS_SELECTOR, "a[data-automation='sign in']")
+                )
+            )
+
             if not self._login():
                 self.logger.error("Login failed, cannot scrape jobs")
-                return
+                raise Exception("Login failed")
 
-            job_count = self._job_keyword()
-            self.logger.info(f"Total jobs found: {job_count}")
-            self._find_job_cards()
+            time.sleep(2)  # wait before serching jobs
+
+            job_count = self._search_jobs_keyword(
+                keyword="linux", location="Jakarta Raya"
+            )
+            if job_count == 0:
+                self.logger.error(
+                    "Job search failed or no jobs found, cannot scrape jobs"
+                )
+                raise Exception("Job search failed")
+
+            self.logger.info(f"Found {job_count} total jobs to process")
+
+            page_num = 0
+            total_jobs_scraped = 0
+            while True:
+                page_num += 1
+                job_cards = self._find_job_cards()
+                for idx, card in enumerate(job_cards, start=1):
+                    self.logger.info(
+                        f"Processing job card {idx}/{len(job_cards)} on page {page_num}"
+                    )
+                    print(
+                        f"Processing job card {idx}/{len(job_cards)} on page {page_num}"
+                    )
+                    job_start_time = time.time()
+                    job_info = {
+                        "id": len(self.jobs_data) + 1,
+                        "job_platform": "JobStreet",
+                    }
+                    job_details = self._extract_job_details(card)
+                    elapsed = time.time() - job_start_time
+                    self.logger.info(
+                        f"Job {job_details.get('job_title')} processed in {elapsed:.2f} seconds"
+                    )
+                    if job_details:
+                        job_record = {**job_info, **job_details}
+                        self.jobs_data.append(job_record)
+                        total_jobs_scraped += 1
+                        self.logger.info(
+                            f"Job {job_details.get('job_title')} processed in {elapsed:.2f} seconds"
+                        )
+
+                print(f"Completed page {page_num}, total jobs: {total_jobs_scraped}")
+                if not self._next_page():
+                    self.logger.info("No more pages to scrape")
+                    break
+
         except Exception as e:
             self.logger.error(f"Error during job scraping: {e}")
-            return
+            raise
+        finally:
+            elapsed_time = time.time() - start_scrape_time
+            self.logger.info(
+                f"Total jobs scraped: {len(self.jobs_data)}, took {elapsed_time:.2f}s"
+            )
+            return self.jobs_data
 
     def close(self):
         self.logger.info("Closing the driver")
