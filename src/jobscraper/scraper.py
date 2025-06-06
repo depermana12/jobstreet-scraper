@@ -99,8 +99,8 @@ class JobScraper:
             for digit in otp:
                 otp_input.send_keys(digit)
                 time.sleep(0.2)
-            # wait until it redirects to the job search page
-            self._find_element_wait(By.ID, "SearchBar")
+            # wait until it redirects to home page
+            self._find_element_wait(By.CSS_SELECTOR, "div[data-automation='homePage']")
             return True
 
         except NoSuchElementException as e:
@@ -139,14 +139,40 @@ class JobScraper:
 
             self._click_element(sort_by_date)
 
-            # wait for page to reload with new sort order
-            time.sleep(3)
-            self._find_element_wait(By.CSS_SELECTOR, "[data-automation='initialView']")
+            if not self._wait_split_view_loaded():
+                self.logger.error("wait failed, fallback to sleep")
+                time.sleep(2)
 
             self.logger.info("Successfully sorted jobs by date")
         except Exception as e:
             self.logger.error(f"Failed to sort jobs by date: {e}")
             raise
+
+    def _wait_split_view_loaded(self):
+        try:
+            WebDriverWait(self.driver, self.long_wait).until(
+                EC.presence_of_element_located(
+                    (By.CSS_SELECTOR, "[data-automation='initialView']")
+                )
+            )
+
+            WebDriverWait(self.driver, self.long_wait).until(
+                EC.text_to_be_present_in_element(
+                    (By.CSS_SELECTOR, "[data-automation='initialView'] h3"),
+                    "Pilih lowongan kerja",
+                )
+            )
+
+            WebDriverWait(self.driver, self.long_wait).until(
+                EC.presence_of_all_elements_located(
+                    (By.CSS_SELECTOR, "article[id^='jobcard-']")
+                )
+            )
+            return True
+
+        except TimeoutException as e:
+            self.logger.error(f"wait split view failed: {e}")
+            return False
 
     def _search_jobs_keyword(self, keyword="linux", location="Jakarta Raya"):
         try:
@@ -165,29 +191,18 @@ class JobScraper:
                 f"Searching for jobs with keyword: {keyword} in {location}"
             )
 
-            # wait for search results
-            WebDriverWait(self.driver, self.long_wait).until(
-                EC.presence_of_element_located(
-                    (By.CSS_SELECTOR, "section[aria-label='Hasil Pencarian']")
-                )
-            )
-            # wait extra for job cards to load
-            WebDriverWait(self.driver, self.long_wait).until(
-                EC.presence_of_all_elements_located(
-                    (By.CSS_SELECTOR, "article[id^='jobcard-']")
-                )
-            )
-
-            time.sleep(2)
+            if not self._wait_split_view_loaded():
+                self.logger.error("wait failed, fallback to sleep")
+                time.sleep(2)
 
             # sort to date, alternative using search query
             self._sort_search_by_date()
 
             # find job counts
             job_count_selectors = [
-                "h1[data-automation='totaljobsMessage']",
-                "div[data-automation='totalJobsCountBcues']",
                 "span[data-automation='totalJobsCount']",
+                "div[data-automation='totalJobsCountBcues']",
+                "h1[data-automation='totaljobsMessage']",
                 "h1[id='SearchSummary']",
             ]
             job_count_text = None
@@ -437,13 +452,6 @@ class JobScraper:
             if not self._login():
                 self.logger.error("Login failed, cannot scrape jobs")
                 raise Exception("Login failed")
-
-            # wait for the home page to load before searching
-            WebDriverWait(self.driver, self.long_wait).until(
-                EC.presence_of_element_located(
-                    (By.CSS_SELECTOR, "div[data-automation='homePage']")
-                )
-            )
 
             time.sleep(2)
 

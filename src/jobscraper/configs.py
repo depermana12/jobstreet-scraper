@@ -41,7 +41,7 @@ def init_firefox_driver():
         driver = webdriver.Firefox(options=options)
         driver.maximize_window()
 
-        time.sleep(2)
+        # time.sleep(2)
         logger.info("Firefox driver initialized successfully")
         return driver
     except Exception as e:
