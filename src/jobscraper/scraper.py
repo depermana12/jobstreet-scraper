@@ -107,6 +107,47 @@ class JobScraper:
             self.logger.error(f"OTP input failed: {e}")
             return False
 
+    def _sort_search_by_date(self):
+        try:
+            sort_selectors = [
+                "div[data-automation='trigger'][role='button']",
+                "button[data-automation='sortedByButtonIconBcues']",
+            ]
+
+            sort_btn = None
+            for selector in sort_selectors:
+                try:
+                    sort_btn = self._find_element_wait(By.CSS_SELECTOR, selector)
+                    self.logger.info(f"Found sort button with: {selector}")
+                    break
+                except NoSuchElementException:
+                    self.logger.warning(f"Sort button not found: {selector}")
+                    continue
+
+            self._click_element(sort_btn)
+            WebDriverWait(self.driver, self.short_wait).until(
+                EC.visibility_of_element_located((By.CSS_SELECTOR, "div[role='menu']"))
+            )
+            sort_by_date = WebDriverWait(self.driver, 3).until(
+                EC.element_to_be_clickable(
+                    (
+                        By.CSS_SELECTOR,
+                        "a[role='menuitem'][data-automation='sortby-1']",
+                    )
+                )
+            )
+
+            self._click_element(sort_by_date)
+
+            # wait for page to reload with new sort order
+            time.sleep(3)
+            self._find_element_wait(By.CSS_SELECTOR, "[data-automation='initialView']")
+
+            self.logger.info("Successfully sorted jobs by date")
+        except Exception as e:
+            self.logger.error(f"Failed to sort jobs by date: {e}")
+            raise
+
     def _search_jobs_keyword(self, keyword="linux", location="Jakarta Raya"):
         try:
             # input keyword
@@ -140,46 +181,7 @@ class JobScraper:
             time.sleep(2)
 
             # sort to date, alternative using search query
-            sort_selectors = [
-                "div[data-automation='trigger'][role='button']",
-                "button[data-automation='sortedByButtonIconBcues']",
-            ]
-            sort_dropdown = None
-            for selector in sort_selectors:
-                try:
-                    self.logger.info(f"Looking for sort dropdown: {selector}")
-                    sort_dropdown = self._find_element_wait(By.CSS_SELECTOR, selector)
-                    self.logger.info(f"Found sort dropdown with: {selector}")
-                    break
-                except NoSuchElementException:
-                    self.logger.warning(f"Sort dropdown not found: {selector}")
-                    continue
-
-            if sort_dropdown:
-                self._click_element(sort_dropdown)
-
-            # wait for the dropdown menu to be visible
-            self.logger.info("Waiting for dropdown menu to appear...")
-            WebDriverWait(self.driver, self.short_wait).until(
-                EC.visibility_of_element_located((By.CSS_SELECTOR, "div[role='menu']"))
-            )
-
-            tanggal_option = WebDriverWait(self.driver, 3).until(
-                EC.element_to_be_clickable(
-                    (
-                        By.CSS_SELECTOR,
-                        "a[role='menuitem'][data-automation='sortby-1']",
-                    )
-                )
-            )
-            if tanggal_option:
-                self.logger.info(f"Clicking sort by: {tanggal_option.text}")
-                self._click_element(tanggal_option)
-
-            # wait for page to reload with new sort order
-            time.sleep(3)
-            self._find_element_wait(By.CSS_SELECTOR, "[data-automation='initialView']")
-            self.logger.info("Successfully sorted jobs by date")
+            self._sort_search_by_date()
 
             # find job counts
             job_count_selectors = [
