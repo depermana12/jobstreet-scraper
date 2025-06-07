@@ -3,7 +3,6 @@ from selenium.webdriver.firefox.firefox_profile import FirefoxProfile
 from selenium import webdriver
 
 import logging
-import time
 import os
 
 
@@ -40,9 +39,6 @@ def init_firefox_driver():
 
         driver = webdriver.Firefox(options=options)
         driver.maximize_window()
-
-        # time.sleep(2)
-        logger.info("Firefox driver initialized successfully")
         return driver
     except Exception as e:
         logger.error(f"Error initializing Firefox driver: {e}")
@@ -52,7 +48,7 @@ def init_firefox_driver():
 def init_driver():
     try:
         driver = init_firefox_driver()
-        logger.info("Web driver initialized successfully")
+        logger.info(f"Web driver {driver.name} initialized successfully")
         return driver
     except Exception as e:
         logger.error(f"Error initializing web driver: {e}")
