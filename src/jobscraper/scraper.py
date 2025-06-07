@@ -52,6 +52,11 @@ class JobScraper:
         return cleaned
 
     def _parse_posted_date(self, date_text: str):
+        if not date_text or "Posted" not in date_text:
+            self.logger.warning(
+                "Posted date text is empty or does not contain 'Posted'"
+            )
+            return None
         text = date_text.replace("Posted", "").strip()
         if "30+" in text:
             return None  # too old
