@@ -75,8 +75,20 @@ class JobScraper:
             self._click_element(sign_in)
             email_input = self._find_element_wait(By.ID, "emailAddress")
             email_input.send_keys(self.email)
-            if email_input.get_attribute("value") == self.email:
-                email_input.send_keys(Keys.ENTER)
+            for _ in range(3):
+                if email_input.get_attribute("value") == self.email:
+                    email_input.send_keys(Keys.ENTER)
+                    break
+                time.sleep(0.3)
+
+            try:
+                otp_input = self._find_element_wait(
+                    By.CSS_SELECTOR, "input[aria-label='verification input']"
+                )
+            except NoSuchElementException:
+                self.logger.error("OTP input not found after submitting email.")
+                return False
+
             return self._otp()
 
         except NoSuchElementException as e:
