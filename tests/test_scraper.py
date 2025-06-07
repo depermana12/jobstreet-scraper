@@ -4,8 +4,10 @@ from unittest.mock import MagicMock, patch
 from selenium.common.exceptions import (
     StaleElementReferenceException,
     ElementClickInterceptedException,
+    NoSuchElementException,
 )
 from jobscraper.scraper import JobScraper
+from selenium.webdriver.common.keys import Keys
 
 
 @pytest.fixture
@@ -100,3 +102,62 @@ class TestDateParsing:
     def test_parse_posted_date_no_posted_text(self, scraper):
         result = scraper._parse_posted_date("5 hours ago")
         assert result is None
+
+
+@pytest.mark.unit
+class TestLogin:
+    def test_login_success(self, scraper):
+        sign_in_element = MagicMock()
+        email_input = MagicMock()
+        email_input.get_attribute.return_value = "bismillah@email.com"
+        otp_input = MagicMock()
+
+        scraper._find_element_wait = MagicMock(
+            side_effect=[sign_in_element, email_input, otp_input]
+        )
+        scraper._click_element = MagicMock(return_value=True)
+        scraper._otp = MagicMock(return_value=True)
+
+        result = scraper._login()
+
+        assert result is True
+        scraper._click_element.assert_called_once_with(sign_in_element)
+        email_input.send_keys.assert_any_call("bismillah@email.com")
+
+    def test_login_enter_key_not_submit(self, scraper):
+        sign_in_element = MagicMock()
+        email_input = MagicMock()
+        email_input.get_attribute.return_value = scraper.email
+
+        scraper._find_element_wait = MagicMock(
+            side_effect=[sign_in_element, email_input, NoSuchElementException]
+        )
+        scraper._click_element = MagicMock(return_value=True)
+        email_input.send_keys = MagicMock()
+        scraper._otp = MagicMock()
+
+        result = scraper._login()
+
+        email_input.send_keys.assert_any_call(Keys.ENTER)
+        assert result is False
+
+    def test_login_element_not_found(self, scraper):
+        scraper._find_element_wait = MagicMock(side_effect=NoSuchElementException())
+
+        result = scraper._login()
+
+        assert result is False
+
+    def test_otp_success(self, scraper):
+        """Test successful OTP entry"""
+        otp_input = MagicMock()
+        home_page = MagicMock()
+
+        scraper._find_element_wait = MagicMock(side_effect=[otp_input, home_page])
+
+        with patch("builtins.input", return_value="123456"):
+            with patch("time.sleep"):
+                result = scraper._otp()
+
+        assert result is True
+        assert otp_input.send_keys.call_count == 6
