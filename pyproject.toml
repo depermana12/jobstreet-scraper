@@ -15,14 +15,30 @@ dependencies = [
 [tool.poetry]
 packages = [{include = "jobscraper", from = "src"}]
 
-
-[tool.poetry.group.dev.dependencies]
-pytest = "^8.4.0"
-isort = "^6.0.1"
-
 [tool.poetry.scripts]
 jobscraper = "jobscraper.main:main"
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
 build-backend = "poetry.core.masonry.api"
+
+[tool.poetry.group.test.dependencies]
+isort = "^6.0.1"
+pytest = "^7.4.0"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py", "*_test.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = [
+    "-v",
+    "--strict-markers",
+    "--strict-config",
+    "--color=yes"
+]
+markers = [
+    "slow: marks tests as slow",
+    "integration: marks tests as integration tests",
+    "unit: marks tests as unit tests"
+]
