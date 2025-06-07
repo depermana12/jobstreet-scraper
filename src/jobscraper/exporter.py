@@ -1,5 +1,6 @@
 import csv
 from datetime import datetime
+import gzip
 import logging
 import os
 
@@ -8,7 +9,6 @@ logger = logging.getLogger(__name__.capitalize())
 EXPORT_DIR = "exports"
 MAIN_CSV = [
     "id",
-    "job_platform",
     "job_title",
     "job_location",
     "job_classification",
@@ -78,7 +78,7 @@ def export_to_csv(jobs_data, filename="jobstreet_jobs"):
     secondary_filename = None
     if secondary_data:
         secondary_filename = _get_timestamp_filename(f"{filename}_secondary", "csv")
-        with open(secondary_filename, "w", newline="", encoding="utf-8") as f:
+        with gzip.open(secondary_filename, "wt", newline="", encoding="utf-8") as f:
             writer = csv.DictWriter(f, fieldnames=SECONDARY_CSV)
             writer.writeheader()
             writer.writerows(secondary_data)
