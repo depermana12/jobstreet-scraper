@@ -153,7 +153,9 @@ class TestLogin:
         otp_input = MagicMock()
         home_page = MagicMock()
 
-        scraper._find_element_wait = MagicMock(side_effect=[otp_input, home_page])
+        scraper._find_element_wait = MagicMock(
+            side_effect=[otp_input, NoSuchElementException(), home_page]
+        )
 
         with patch("builtins.input", return_value="123456"):
             with patch("time.sleep"):
@@ -161,3 +163,27 @@ class TestLogin:
 
         assert result is True
         assert otp_input.send_keys.call_count == 6
+
+    def test_otp_failure_retry(self, scraper):
+        """Test OTP entry failure due to incorrect input"""
+        otp_input = MagicMock()
+        otp_alert = MagicMock()
+        otp_alert.text = "invalid code"
+
+        scraper._find_element_wait = MagicMock(
+            side_effect=[
+                otp_input,
+                otp_alert,
+                otp_input,
+                otp_alert,
+                otp_input,
+                otp_alert,
+            ]
+        )
+
+        with patch("builtins.input", return_value="123456"):
+            with patch("time.sleep"):
+                result = scraper._otp()
+
+        assert result is False
+        assert otp_input.send_keys.call_count == 18
