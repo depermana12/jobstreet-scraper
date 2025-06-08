@@ -96,7 +96,9 @@ class JobScraper:
             return False
 
     def _otp(self):
-        while True:
+        max_attempts = 3
+        attempts = 0
+        while attempts < max_attempts:
             otp = input("Enter OTP: ").strip()
             if not otp.isdigit() or len(otp) != 6:
                 print("Invalid OTP, enter 6-digit numeric")
@@ -123,6 +125,7 @@ class JobScraper:
                 )
                 if "invalid code" in error_alert.text.strip().lower():
                     print("Invalid OTP, please try again.")
+                    attempts += 1
                     continue
             except NoSuchElementException:
                 pass
@@ -130,6 +133,9 @@ class JobScraper:
             # wait until it redirects to home page
             self._find_element_wait(By.CSS_SELECTOR, "div[data-automation='homePage']")
             return True
+
+        self.logger.error("OTP failed 3 times. Aborting login")
+        return False
 
     def _sort_search_by_date(self):
         try:
