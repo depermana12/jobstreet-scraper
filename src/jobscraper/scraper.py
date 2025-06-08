@@ -96,22 +96,40 @@ class JobScraper:
             return False
 
     def _otp(self):
-        try:
+        while True:
             otp = input("Enter OTP: ").strip()
-            otp_input = self._find_element_wait(
-                By.CSS_SELECTOR, "input[aria-label='verification input']"
-            )
+            if not otp.isdigit() or len(otp) != 6:
+                print("Invalid OTP, enter 6-digit numeric")
+                continue
+
+            try:
+                otp_input = self._find_element_wait(
+                    By.CSS_SELECTOR, "input[aria-label='verification input']"
+                )
+            except NoSuchElementException:
+                self.logger.error("OTP input not found")
+                return False
+
             otp_input.click()
             for digit in otp:
                 otp_input.send_keys(digit)
                 time.sleep(0.2)
+
+            # wait for failed otp
+            time.sleep(2)
+            try:
+                error_alert = self._find_element_wait(
+                    By.CSS_SELECTOR, "[aria-live='polite']"
+                )
+                if "invalid code" in error_alert.text.strip().lower():
+                    print("Invalid OTP, please try again.")
+                    continue
+            except NoSuchElementException:
+                pass
+
             # wait until it redirects to home page
             self._find_element_wait(By.CSS_SELECTOR, "div[data-automation='homePage']")
             return True
-
-        except NoSuchElementException as e:
-            self.logger.error(f"OTP input failed: {e}")
-            return False
 
     def _sort_search_by_date(self):
         try:
