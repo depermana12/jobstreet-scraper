@@ -397,23 +397,29 @@ class JobScraper:
 
     def _next_page(self):
         try:
-            next_button = self._find_element_wait(
+            next_btn = self._find_element_wait(
                 By.CSS_SELECTOR,
                 f"a[aria-label='Selanjutnya']",
             )
-            if not self._click_element(next_button):
-                self.logger.error("Failed to click next page button")
+            next_attr = next_btn.get_attribute("aria-hidden")
+            if next_attr == "true":
+                self.logger.info("No more pages to navigate")
                 return False
 
-            if not self._wait_split_view_loaded():
-                self.logger.error("Next page did not load properly")
-                return False
-
-            self.logger.info("Navigated to the next page")
-            return True
-        except NoSuchElementException as e:
-            self.logger.error(f"Failed to navigate to next page: {e}")
+        except NoSuchElementException:
+            self.logger.error("Failed to find next page button")
             return False
+
+        if not self._click_element(next_btn):
+            self.logger.error("Failed to click next page button")
+            return False
+
+        if not self._wait_split_view_loaded():
+            self.logger.error("Next page did not load properly")
+            return False
+
+        self.logger.info("Navigated to the next page")
+        return True
 
     def scrape_jobs(self, keyword: str, location: str):
         try:
