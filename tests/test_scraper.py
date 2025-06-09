@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta
 import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, patch, call
 from selenium.common.exceptions import (
     StaleElementReferenceException,
     ElementClickInterceptedException,
@@ -149,7 +149,6 @@ class TestLogin:
         assert result is False
 
     def test_otp_success(self, scraper):
-        """Test successful OTP entry"""
         otp_input = MagicMock()
         home_page = MagicMock()
 
@@ -165,7 +164,6 @@ class TestLogin:
         assert otp_input.send_keys.call_count == 6
 
     def test_otp_failure_retry(self, scraper):
-        """Test OTP entry failure due to incorrect input"""
         otp_input = MagicMock()
         otp_alert = MagicMock()
         otp_alert.text = "invalid code"
@@ -187,3 +185,33 @@ class TestLogin:
 
         assert result is False
         assert otp_input.send_keys.call_count == 18
+
+
+@pytest.mark.unit
+class TestSearchJobsKeyword:
+    def test_search_jobs_success(self, scraper):
+        keyword_input = MagicMock()
+        location_input = MagicMock()
+        search_summary = MagicMock()
+        job_count_element = MagicMock()
+        job_count_element.text = "1,234 jobs found"
+        search_summary.find_element.return_value = job_count_element
+
+        scraper._find_element_wait = MagicMock(
+            side_effect=[keyword_input, location_input, search_summary]
+        )
+        scraper._wait_split_view_loaded = MagicMock(return_value=True)
+        scraper._sort_search_by_date = MagicMock()
+
+        result = scraper._search_jobs_keyword("python", "Jakarta Raya")
+
+        assert result == 1234
+        keyword_input.send_keys.assert_has_calls([call("python"), call(Keys.ENTER)])
+        location_input.send_keys.assert_any_call("Jakarta Raya")
+
+    def test_search_jobs_element_not_found(self, scraper):
+        scraper._find_element_wait = MagicMock(side_effect=NoSuchElementException())
+
+        result = scraper._search_jobs_keyword("python", "Jakarta Raya")
+
+        assert result == 0
