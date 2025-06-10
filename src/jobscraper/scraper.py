@@ -256,7 +256,7 @@ class JobScraper:
                 return int(job_id.split("-")[-1])
 
             return sorted(job_cards, key=get_idx)
-        except TimeoutException as e:
+        except NoSuchElementException as e:
             self.logger.error(f"Job cards not found: {e}")
             return []
 
