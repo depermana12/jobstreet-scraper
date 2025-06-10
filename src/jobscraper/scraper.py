@@ -183,16 +183,18 @@ class JobScraper:
             self.logger.error(f"wait split view failed: {e}")
             return False
 
-    def _search_jobs_keyword(self, keyword="linux", location="Jakarta Raya"):
+    def _search_jobs_keyword(self, keyword: str, location: str):
         try:
             # input keyword
             keyword_input = self._find_element_wait(By.ID, "keywords-input")
             keyword_input.click()
+            keyword_input.clear()
             keyword_input.send_keys(keyword)
 
             # input location
             location_input = self._find_element_wait(By.ID, "SearchBar__Where")
             location_input.click()
+            location_input.clear()
             location_input.send_keys(location)
             keyword_input.send_keys(Keys.ENTER)
 
@@ -427,7 +429,7 @@ class JobScraper:
         self.logger.info("Navigated to the next page")
         return True
 
-    def scrape_jobs(self, keyword: str, location: str):
+    def scrape_jobs(self, keywords: list[str], location: str):
         try:
             start_scrape_time = time.time()
             self.driver.get(self.url)
@@ -438,49 +440,55 @@ class JobScraper:
                 raise Exception("Login failed")
 
             time.sleep(2)
-
-            job_count = self._search_jobs_keyword(keyword=keyword, location=location)
-            if job_count == 0:
-                self.logger.error(
-                    "Job search failed or no jobs found, cannot scrape jobs"
-                )
-                raise Exception("Job search failed")
-
-            page_num = 0
+            total_keywords = len(keywords)
             total_jobs_scraped = 0
-            while True:
-                page_num += 1
-                job_cards = self._find_job_cards()
-                for idx, card in enumerate(job_cards, start=1):
+            for idx, keyword in enumerate(keywords, start=1):
+                print(
+                    f"Searching with keyword {idx}/{total_keywords}: {keyword} in {location}"
+                )
+                job_count = self._search_jobs_keyword(
+                    keyword=keyword, location=location
+                )
+                if job_count == 0:
+                    self.logger.warning(f"No jobs found for keyword: {keyword}")
+                    continue
+
+                page_num = 0
+                while True:
+                    page_num += 1
+                    job_cards = self._find_job_cards()
+                    for idx, card in enumerate(job_cards, start=1):
+                        print(
+                            f"Processing job card {idx}/{len(job_cards)} on page {page_num}"
+                        )
+                        job_start_time = time.time()
+                        job_info = {
+                            "id": len(self.jobs_data) + 1,
+                            "search_keyword": keyword,
+                        }
+                        job_details = self._extract_job_details(card)
+                        elapsed = time.time() - job_start_time
+                        job_record = {**job_info, **job_details}
+                        self.jobs_data.append(job_record)
+                        total_jobs_scraped += 1
+                        print(f"Job card {idx} processed in {elapsed:.2f}s")
+
                     print(
-                        f"Processing job card {idx}/{len(job_cards)} on page {page_num}"
+                        f"Completed page {page_num}, total jobs: {total_jobs_scraped}"
                     )
-                    job_start_time = time.time()
-                    job_info = {
-                        "id": len(self.jobs_data) + 1,
-                    }
-                    job_details = self._extract_job_details(card)
-                    elapsed = time.time() - job_start_time
-                    job_record = {**job_info, **job_details}
-                    self.jobs_data.append(job_record)
-                    total_jobs_scraped += 1
-                    print(f"Job card {idx} processed in {elapsed:.2f}s")
-
-                print(f"Completed page {page_num}, total jobs: {total_jobs_scraped}")
-
-                if not self._next_page():
-                    print("No more pages to scrape.")
-                    break
+                    if not self._next_page():
+                        print("No more pages to scrape.")
+                        break
 
         except Exception as e:
             self.logger.error(f"Error during job scraping: {e}")
-            raise
         finally:
             elapsed_time = time.time() - start_scrape_time
             print(
                 f"Total jobs scraped: {len(self.jobs_data)}, took {elapsed_time:.2f}s"
             )
-            return self.jobs_data
+
+        return self.jobs_data
 
     def close(self):
         self.driver.quit()

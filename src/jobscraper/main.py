@@ -16,10 +16,11 @@ def cli():
 def main():
     init_logging()
     args = cli()
+    keywords = [k.strip() for k in args.k.split(",") if k.strip()]
     scraper = JobScraper(email=args.e)
 
     try:
-        jobs_data = scraper.scrape_jobs(keyword=args.k, location=args.l)
+        jobs_data = scraper.scrape_jobs(keyword=keywords, location=args.l)
         main_csv, secondary_csv = export_to_csv(jobs_data)
         print(f"Main data exported to: {main_csv}")
 
