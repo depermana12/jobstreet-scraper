@@ -4,28 +4,33 @@ A Python cli tool to scrape **job vacancies based on keywords and location** fro
 
 ### Extracted Data Fields
 
-The scraped data separates into two CSV files. Job requirements are stored in a secondary csv file linked with main id csv.
+The scraped data separates into two csv files. First csv file contains job listings with detailed information, while the second csv file contains job requirements linked by job id.
+
+please note that the second csv is compressed with gzip format, so you need to decompress it first before using it.
+
+optional means that the field may not be available for all job.
 
 - **Main CSV**: Contains detailed information
 
-  - ID
-  - Job title
-  - Job location
-  - Job classification
-  - Job type
-  - Job salary range (optional)
-  - Job posted date
-  - Job apply link
-  - Job URL
-  - Company name
-  - Company rating (optional)
-  - Company business type (optional)
-  - Company employees size (optional)
-  - Company benefits (optional)
+  - id
+  - search keyword
+  - job title
+  - job location
+  - job classification
+  - job type
+  - job salary range (optional)
+  - job posted date
+  - job apply link
+  - job URL
+  - company name
+  - company rating (optional)
+  - company business type (optional)
+  - company employees size (optional)
+  - company benefits (optional)
 
 - **Secondary CSV**: Contains job requirements
-  - Job id
-  - Job requirements
+  - job id
+  - job requirements
 
 ---
 
@@ -66,17 +71,19 @@ The scraped data separates into two CSV files. Job requirements are stored in a 
 
 ## Usage
 
+you can put one or more keyword position separated by comma. It will take longer to scrape if you put more than one keyword.
+
 ```bash
 # Basic usage
 
-poetry run jobscraper -e youremail@example.com -k "python developer" -l "Jakarta Raya"
+poetry run jobscraper -e youremail@example.com -k "python developer, data analyst, data scientist" -l "Jakarta Raya"
 ```
 
 The scraper provides a simple CLI with three required arguments:
 
-- `-e`: Your JobStreet email
-- `-k`: Job search keyword
-- `-l`: Job search location
+- `-e`: your jobstreet email
+- `-k`: job search keyword (one or more keywords separated by commas)
+- `-l`: job search location
 
 ### Example Workflow
 
