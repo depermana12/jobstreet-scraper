@@ -215,3 +215,30 @@ class TestSearchJobsKeyword:
         result = scraper._search_jobs_keyword("python", "Jakarta Raya")
 
         assert result == 0
+
+
+@pytest.mark.unit
+class TestFindJobCards:
+    def test_find_job_cards_success(self, scraper):
+        card1 = MagicMock()
+        card1.get_attribute.return_value = "jobcard-1"
+        card2 = MagicMock()
+        card2.get_attribute.return_value = "jobcard-2"
+        card3 = MagicMock()
+        card3.get_attribute.return_value = "jobcard-3"
+        job_cards = [card3, card2, card1]
+        scraper._find_element_wait = MagicMock(return_value=job_cards)
+
+        results = scraper._find_job_cards()
+
+        assert len(results) == 3
+        assert results[0].get_attribute("id") == "jobcard-1"
+        assert results[1].get_attribute("id") == "jobcard-2"
+        assert results[2].get_attribute("id") == "jobcard-3"
+
+    def test_find_job_cards_missing(self, scraper):
+        scraper._find_element_wait = MagicMock(side_effect=NoSuchElementException())
+
+        result = scraper._find_job_cards()
+
+        assert result == []
