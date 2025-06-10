@@ -242,3 +242,37 @@ class TestFindJobCards:
         result = scraper._find_job_cards()
 
         assert result == []
+
+
+@pytest.mark.unit
+class TestNextPage:
+    def test_next_page_success(self, scraper):
+        next_btn = MagicMock()
+        next_btn.get_attribute.return_value = "false"
+        scraper._find_element_wait = MagicMock(return_value=next_btn)
+        scraper._click_element = MagicMock(return_value=True)
+        scraper._wait_split_view_loaded = MagicMock(return_value=True)
+
+        result = scraper._next_page()
+
+        assert next_btn.get_attribute("aria-hidden") == "false"
+        assert result is True
+        scraper._click_element.assert_called_once_with(next_btn)
+
+    def test_next_page_end(self, scraper):
+        next_btn = MagicMock()
+        next_btn.get_attribute.return_value = "true"
+        scraper._find_element_wait = MagicMock(return_value=next_btn)
+
+        result = scraper._next_page()
+
+        assert result is False
+        assert next_btn.get_attribute("aria-hidden") == "true"
+
+    def test_next_page_missing(self, scraper):
+        scraper._find_element_wait = MagicMock(side_effect=NoSuchElementException())
+
+        result = scraper._next_page()
+
+        assert result is False
+        scraper._find_element_wait.assert_called_once()
