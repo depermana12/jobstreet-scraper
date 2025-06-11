@@ -60,12 +60,13 @@ class JobScraper:
         text = date_text.replace("Posted", "").strip()
         if "30+" in text:
             return None  # too old
+        elif "jam" in text:
+            return datetime.now().strftime("%d-%m-%Y")
         else:
             match = re.search(r"\d+", text)
             days_ago = int(match.group())
-
-        posted_date = datetime.now() - timedelta(days=days_ago)
-        return posted_date.strftime("%d-%m-%Y")
+            posted_date = datetime.now() - timedelta(days=days_ago)
+            return posted_date.strftime("%d-%m-%Y")
 
     def _login(self):
         try:
