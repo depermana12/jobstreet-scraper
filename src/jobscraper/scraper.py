@@ -395,13 +395,23 @@ class JobScraper:
             pass
 
         try:
-            apply_link = details.find_element(
+            apply_link_element = details.find_element(
                 By.CSS_SELECTOR, selectors["apply_link"]
-            ).get_attribute("href")
-            job_data["job_apply_link"] = apply_link
-            job_data["job_url"] = apply_link.split("apply")[0] if apply_link else None
+            )
+            apply_link = apply_link_element.get_attribute("href")
         except NoSuchElementException:
-            pass
+            apply_link = None
+
+        if not apply_link:
+            print("Apply link not found, already applied. Construct from url")
+            apply_link_id = self.driver.current_url.split("jobId=")[1].split("&")[0]
+            apply_link = f"https://id.jobstreet.com/id/job/{apply_link_id}/?ref=applied"
+            print(f"Constructed apply link: {apply_link}")
+            job_data["job_url"] = apply_link.split("?")[0]
+        else:
+            job_data["job_url"] = apply_link.split("apply")[0]
+
+        job_data["job_apply_link"] = apply_link
 
         company_profile = self._extract_company_profile(details)
         job_data.update(company_profile)
