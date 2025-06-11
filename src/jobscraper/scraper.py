@@ -210,6 +210,10 @@ class JobScraper:
             # sort to date, alternative using search query
             self._sort_search_by_date()
 
+            if not self._wait_split_view_loaded():
+                self.logger.error("Failed to load split view after searching")
+                time.sleep(2)
+
             # find job counts
             search_summary = self._find_element_wait(
                 By.ID,
@@ -443,6 +447,7 @@ class JobScraper:
             time.sleep(2)
             total_keywords = len(keywords)
             total_jobs_scraped = 0
+            batch = []
             for idx, keyword in enumerate(keywords, start=1):
                 print(
                     f"Searching with keyword {idx}/{total_keywords}: {keyword} in {location}"
@@ -464,15 +469,19 @@ class JobScraper:
                         )
                         job_start_time = time.time()
                         job_info = {
-                            "id": len(self.jobs_data) + 1,
+                            "id": total_jobs_scraped + 1,
                             "search_keyword": keyword,
                         }
                         job_details = self._extract_job_details(card)
                         elapsed = time.time() - job_start_time
                         job_record = {**job_info, **job_details}
-                        self.jobs_data.append(job_record)
+                        batch.append(job_record)
                         total_jobs_scraped += 1
                         print(f"Job card {idx} processed in {elapsed:.2f}s")
+
+                        if len(batch) >= 100:
+                            yield batch
+                            batch = []
 
                     print(
                         f"Completed page {page_num}, total jobs: {total_jobs_scraped}"
@@ -480,16 +489,14 @@ class JobScraper:
                     if not self._next_page():
                         print("No more pages to scrape.")
                         break
+            if batch:
+                yield batch
 
         except Exception as e:
             self.logger.error(f"Error during job scraping: {e}")
         finally:
             elapsed_time = time.time() - start_scrape_time
-            print(
-                f"Total jobs scraped: {len(self.jobs_data)}, took {elapsed_time:.2f}s"
-            )
-
-        return self.jobs_data
+            print(f"Total jobs scraped: {total_jobs_scraped}, took {elapsed_time:.2f}s")
 
     def close(self):
         self.driver.quit()
