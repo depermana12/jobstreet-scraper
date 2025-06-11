@@ -10,6 +10,9 @@ please note that the second csv is compressed with gzip format, so you need to d
 
 optional means that the field may not be available for all job.
 
+example of the merged data frame:
+[google colab notebook](https://colab.research.google.com/drive/12N8we6Dx9Ah5gFU3LMQj-GxjgzNpp1EH?usp=sharing)
+
 - **Main CSV**: Contains detailed information
 
   - id
@@ -121,7 +124,7 @@ The scraper provides a simple CLI with three required arguments:
 - The scraper requires you to manually enter the OTP sent to your email.
 - The scraper uses Selenium to automate Firefox. Ensure you have the latest Firefox version
 - Not supported on headless mode
-- The scraper may take some time to complete depending on the number of jobs found.
+- The scraper may take some time to complete depending on the number of jobs found and keywords you provided.
 
 ## Disclaimer
 
