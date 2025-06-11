@@ -91,7 +91,7 @@ class TestDateParsing:
             mock_now = datetime(2023, 6, 15)
             mock_datetime.now.return_value = mock_now
 
-            result = scraper._parse_posted_date("Posted 0 days ago")
+            result = scraper._parse_posted_date("Posted 12 jam yang lalu")
             expected_date = mock_now.strftime("%d-%m-%Y")
             assert result == expected_date
 
