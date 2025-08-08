@@ -40,6 +40,7 @@ example of the merged data frame:
 ## Requirements
 
 - **Python**: 3.11 or higher
+- **Poetry**: latest (poetry is dependency management tool)
 - **Firefox**: Latest version recommended
 - **JobStreet Account**: Valid email credentials
 - **Internet Connection**: Stable connection required
